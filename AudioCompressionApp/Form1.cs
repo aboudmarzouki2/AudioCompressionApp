@@ -2,6 +2,7 @@
 using System.Drawing;
 using System.Windows.Forms;
 using System.Windows.Forms.DataVisualization.Charting;
+using AudioCompressionApp.mohalali;
 
 namespace AudioCompressionApp
 {
@@ -9,7 +10,7 @@ namespace AudioCompressionApp
     {
         // Our Audio Engine instance
         private AudioEngine engine = new AudioEngine();
-
+        private CompressionContext compressionCtx = new CompressionContext(); // ← جديد
         // UI Controls Declaration
         private TextBox txtFilePath;
         private Button btnBrowse, btnPlay, btnStop, btnCompress, btnCancel;
@@ -107,6 +108,7 @@ namespace AudioCompressionApp
                 {
                     txtFilePath.Text = ofd.FileName;
                     lblProps.Text = engine.LoadFileAndGetProperties(ofd.FileName);
+                    compressionCtx.Load(ofd.FileName);
                 }
             }
         }
@@ -133,6 +135,7 @@ namespace AudioCompressionApp
             {
                 txtFilePath.Text = files[0];
                 lblProps.Text = engine.LoadFileAndGetProperties(files[0]);
+                compressionCtx.Load(files[0]); 
             }
         }
 
@@ -142,9 +145,26 @@ namespace AudioCompressionApp
 
         private void BtnCompress_Click(object sender, EventArgs e)
         {
-            // TODO: 'Multithreading Specialist' triggers BackgroundWorker here
-            // TODO: 'Algorithm Engineers' execute selected algorithm from cmbAlgorithms.Text
-            MessageBox.Show($"Starting {cmbAlgorithms.Text} at {numSampleRate.Value} Hz...");
+            if (string.IsNullOrEmpty(compressionCtx.OriginalFilePath))
+            {
+                MessageBox.Show("الرجاء اختيار ملف صوتي أولاً.");
+                return;
+            }
+
+            string algorithm = cmbAlgorithms.Text;
+            int targetRate = (int)numSampleRate.Value;
+
+            // استدعاء خدمة الضغط من ملفات mohalali
+            var result = CompressionService.Compress(
+                compressionCtx.OriginalFilePath, algorithm, targetRate);
+
+            // تحديث الخصائص
+            ReportManager.UpdatePropertiesAfterCompression(engine, result.compressedPath, lblProps);
+
+            // عرض التقرير
+            ReportManager.ShowReport(
+                compressionCtx.OriginalSizeBytes, result.compressedPath,
+                result.elapsedSeconds, algorithm, targetRate);
         }
 
         private void BtnCancel_Click(object sender, EventArgs e)
