@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace multiMediaProject.CompressionAlgorithms
+namespace AudioCompressionApp.CompressionAlgorithms
 {
     public static class DPCM
     {
@@ -13,7 +13,8 @@ namespace multiMediaProject.CompressionAlgorithms
 
         public static byte[] Encode(float[] samples, int quantizationLevels)
         {
-            short[] encoded = new short[samples.Length];
+            // تخزين كل عينة كـ byte واحد (8-bit)
+            byte[] encoded = new byte[samples.Length];
             float predicted = 0;
             float step = 2f / quantizationLevels;
 
@@ -22,27 +23,22 @@ namespace multiMediaProject.CompressionAlgorithms
                 float error = samples[i] - predicted;
                 int quantizedError = (int)((error + 1) / step);
                 quantizedError = Clamp(quantizedError, 0, quantizationLevels - 1);
-                encoded[i] = (short)quantizedError;
+                encoded[i] = (byte)quantizedError;
                 predicted += (quantizedError * step) - 1;
             }
 
-            byte[] result = new byte[encoded.Length * 2];
-            Buffer.BlockCopy(encoded, 0, result, 0, result.Length);
-            return result;
+            return encoded;
         }
 
         public static float[] Decode(byte[] compressedData, int quantizationLevels)
         {
-            short[] encoded = new short[compressedData.Length / 2];
-            Buffer.BlockCopy(compressedData, 0, encoded, 0, compressedData.Length);
-
-            float[] decoded = new float[encoded.Length];
+            float[] decoded = new float[compressedData.Length];
             float predicted = 0;
             float step = 2f / quantizationLevels;
 
-            for (int i = 0; i < encoded.Length; i++)
+            for (int i = 0; i < compressedData.Length; i++)
             {
-                float error = (encoded[i] * step) - 1;
+                float error = (compressedData[i] * step) - 1;
                 predicted += error;
                 decoded[i] = predicted;
             }

@@ -108,6 +108,9 @@
     <Compile Include="mohalali\CompressionContext.cs" />
     <Compile Include="mohalali\CompressionService.cs" />
     <Compile Include="mohalali\ReportManager.cs" />
+    <Compile Include="CompressionAlgorithms\DPCM.cs" />
+    <Compile Include="CompressionAlgorithms\DeltaModulation.cs" />
+    <Compile Include="CompressionAlgorithms\AdaptiveDeltaModulation.cs" />
     <Compile Include="Form1.cs">
       <SubType>Form</SubType>
     </Compile>

@@ -61,7 +61,7 @@ namespace AudioCompressionApp
             GroupBox grpSettings = new GroupBox { Text = "3. Compression Settings", Bounds = new Rectangle(20, 120, 500, 80) };
             Label lblAlgo = new Label { Text = "Algorithm:", Bounds = new Rectangle(20, 30, 70, 25) };
             cmbAlgorithms = new ComboBox { Bounds = new Rectangle(90, 28, 200, 25), DropDownStyle = ComboBoxStyle.DropDownList };
-            cmbAlgorithms.Items.AddRange(new string[] { "Nonlinear Quantization", "DPCM", "Predictive Coding", "Delta Modulation" });
+            cmbAlgorithms.Items.AddRange(new string[] { "DPCM", "Delta Modulation", "Adaptive Delta Modulation" });
             cmbAlgorithms.SelectedIndex = 0;
 
             Label lblRate = new Label { Text = "Target Rate:", Bounds = new Rectangle(310, 30, 80, 25) };
@@ -144,29 +144,30 @@ namespace AudioCompressionApp
         // ==========================================
 
         private void BtnCompress_Click(object sender, EventArgs e)
-        {
-            if (string.IsNullOrEmpty(compressionCtx.OriginalFilePath))
-            {
-                MessageBox.Show("الرجاء اختيار ملف صوتي أولاً.");
-                return;
-            }
+{
+    if (string.IsNullOrEmpty(compressionCtx.OriginalFilePath))
+    {
+        MessageBox.Show("الرجاء اختيار ملف صوتي أولاً.");
+        return;
+    }
 
-            string algorithm = cmbAlgorithms.Text;
-            int targetRate = (int)numSampleRate.Value;
+    string algorithm = cmbAlgorithms.Text;
+    int targetRate = (int)numSampleRate.Value;
 
-            // استدعاء خدمة الضغط من ملفات mohalali
-            var result = CompressionService.Compress(
-                compressionCtx.OriginalFilePath, algorithm, targetRate);
+    // استدعاء خدمة الضغط من ملفات mohalali
+    var result = CompressionService.Compress(
+        compressionCtx.OriginalFilePath, algorithm, targetRate);
 
-            // تحديث الخصائص
-            ReportManager.UpdatePropertiesAfterCompression(engine, result.compressedPath, lblProps);
+    // تحديث الخصائص مع معلومات إضافية
+    ReportManager.UpdatePropertiesAfterCompression(
+        engine, result.compressedPath, lblProps,
+        compressionCtx.OriginalSizeBytes, result.sampleRate, result.channels, result.bitsPerSample, algorithm);
 
-            // عرض التقرير
-            ReportManager.ShowReport(
-                compressionCtx.OriginalSizeBytes, result.compressedPath,
-                result.elapsedSeconds, algorithm, targetRate);
-        }
-
+    // عرض التقرير
+    ReportManager.ShowReport(
+        compressionCtx.OriginalSizeBytes, result.compressedPath,
+        result.elapsedSeconds, algorithm, targetRate);
+}
         private void BtnCancel_Click(object sender, EventArgs e)
         {
             // TODO: 'Multithreading Specialist' triggers cancellation here

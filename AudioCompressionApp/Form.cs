@@ -2,7 +2,7 @@
 using System.IO;
 using System.Windows.Forms;
 using NAudio.Wave;
-using multiMediaProject.CompressionAlgorithms;
+namespace AudioCompressionApp.CompressionAlgorithms;
 
 namespace multiMediaProject
 {

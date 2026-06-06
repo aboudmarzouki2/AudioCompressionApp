@@ -1,4 +1,3 @@
-// الملف: mohalali/ReportManager.cs
 using System;
 using System.IO;
 using System.Windows.Forms;
@@ -7,18 +6,47 @@ namespace AudioCompressionApp.mohalali
 {
     public static class ReportManager
     {
-        /// <summary>
-        /// يحدث نص lblProps بخصائص الملف المضغوط
-        /// </summary>
         public static void UpdatePropertiesAfterCompression(
-            AudioEngine engine, string compressedPath, Label lblProps)
+            AudioEngine engine, string compressedPath, Label lblProps,
+            long originalSize, int sampleRate, int channels, int bitsPerSample, string algorithm)
         {
-            lblProps.Text = engine.LoadFileAndGetProperties(compressedPath);
+            try
+            {
+                // محاولة قراءة الملف بالطريقة العادية (لـ DPCM وغيره)
+                if (bitsPerSample >= 8)
+                {
+                    lblProps.Text = engine.LoadFileAndGetProperties(compressedPath);
+                }
+                else
+                {
+                    // للملفات 1-bit: حساب الخصائص يدوياً
+                    FileInfo fileInfo = new FileInfo(compressedPath);
+                    long fileSizeBytes = fileInfo.Length;
+                    double fileSizeMB = fileSizeBytes / (1024.0 * 1024.0);
+                    
+                    // حساب المدة بناءً على عدد البتات
+                    long totalBits = fileSizeBytes * 8;
+                    int totalSamples = (int)(totalBits / channels);
+                    double durationSeconds = (double)totalSamples / sampleRate;
+                    TimeSpan duration = TimeSpan.FromSeconds(durationSeconds);
+                    
+                    int bitRate = sampleRate * channels * bitsPerSample;
+                    
+                    lblProps.Text = $"Size: {fileSizeMB:F2} MB\n" +
+                                   $"Duration: {duration.Hours:D2}:{duration.Minutes:D2}:{duration.Seconds:D2}\n" +
+                                   $"Sample Rate: {sampleRate} Hz\n" +
+                                   $"Channels: {channels}\n" +
+                                   $"Bit Rate: {bitRate} bps\n" +
+                                   $"Bits Per Sample: {bitsPerSample} bit\n" +
+                                   $"Algorithm: {algorithm}";
+                }
+            }
+            catch (Exception ex)
+            {
+                lblProps.Text = $"Error reading compressed file:\n{ex.Message}";
+            }
         }
 
-        /// <summary>
-        /// يعرض نافذة تقرير الضغط
-        /// </summary>
         public static void ShowReport(
             long originalSizeBytes,
             string compressedPath,

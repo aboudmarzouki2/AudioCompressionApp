@@ -1,6 +1,6 @@
 ﻿using System.Collections.Generic;
 
-namespace multiMediaProject.CompressionAlgorithms
+namespace AudioCompressionApp.CompressionAlgorithms
 {
     public static class DeltaModulation
     {
