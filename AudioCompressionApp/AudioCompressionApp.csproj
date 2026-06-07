@@ -105,6 +105,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AudioEngine.cs" />
+    <Compile Include="DecompressionService.cs" />
     <Compile Include="mohalali\CompressionContext.cs" />
     <Compile Include="mohalali\CompressionService.cs" />
     <Compile Include="mohalali\ReportManager.cs" />
@@ -146,5 +147,4 @@
     <None Include="App.config" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-  
 </Project>

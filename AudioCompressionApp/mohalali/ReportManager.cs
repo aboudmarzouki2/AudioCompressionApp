@@ -12,26 +12,23 @@ namespace AudioCompressionApp.mohalali
         {
             try
             {
-                // محاولة قراءة الملف بالطريقة العادية (لـ DPCM وغيره)
                 if (bitsPerSample >= 8)
                 {
                     lblProps.Text = engine.LoadFileAndGetProperties(compressedPath);
                 }
                 else
                 {
-                    // للملفات 1-bit: حساب الخصائص يدوياً
                     FileInfo fileInfo = new FileInfo(compressedPath);
                     long fileSizeBytes = fileInfo.Length;
                     double fileSizeMB = fileSizeBytes / (1024.0 * 1024.0);
-                    
-                    // حساب المدة بناءً على عدد البتات
+
                     long totalBits = fileSizeBytes * 8;
                     int totalSamples = (int)(totalBits / channels);
                     double durationSeconds = (double)totalSamples / sampleRate;
                     TimeSpan duration = TimeSpan.FromSeconds(durationSeconds);
-                    
+
                     int bitRate = sampleRate * channels * bitsPerSample;
-                    
+
                     lblProps.Text = $"Size: {fileSizeMB:F2} MB\n" +
                                    $"Duration: {duration.Hours:D2}:{duration.Minutes:D2}:{duration.Seconds:D2}\n" +
                                    $"Sample Rate: {sampleRate} Hz\n" +
@@ -61,16 +58,16 @@ namespace AudioCompressionApp.mohalali
             double reduction = (1 - (double)compressedSize / originalSizeBytes) * 100;
 
             string report =
-                $"📊 تقرير الضغط\n\n" +
-                $"الخوارزمية: {algorithm}\n" +
-                $"معدل العيّنات المستهدف: {targetSampleRate} Hz\n" +
-                $"⏱ الزمن المستغرق: {elapsedSeconds:F2} ثانية\n\n" +
-                $"حجم الملف الأصلي: {originalMB:F2} MB\n" +
-                $"حجم الملف المضغوط: {compressedMB:F2} MB\n" +
-                $"نسبة التخفيض: {reduction:F1}%\n\n" +
-                $"مسار الملف المضغوط:\n{compressedPath}";
+                $"📊 Compression Report\n\n" +
+                $"Algorithm: {algorithm}\n" +
+                $"Target Sample Rate: {targetSampleRate} Hz\n" +
+                $"⏱ Time Elapsed: {elapsedSeconds:F2} seconds\n\n" +
+                $"Original Size: {originalMB:F2} MB\n" +
+                $"Compressed Size: {compressedMB:F2} MB\n" +
+                $"Space Saved: {reduction:F1}%\n\n" +
+                $"Compressed File Path:\n{compressedPath}";
 
-            MessageBox.Show(report, "تقرير الضغط", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(report, "Compression Report", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
     }
 }
