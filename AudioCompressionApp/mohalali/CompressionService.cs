@@ -11,7 +11,7 @@ namespace AudioCompressionApp.mohalali
         public static (string compressedPath, double elapsedSeconds, int bitsPerSample, int sampleRate, int channels) Compress(
             string inputPath,
             string algorithm,
-            int targetSampleRate, // We keep this to not break your UI, but we ignore it!
+            int targetSampleRate,
             int quantizationLevels,
             int stepSize,
             float alpha,
@@ -29,16 +29,24 @@ namespace AudioCompressionApp.mohalali
             int originalSampleRate;
             int channels;
 
-            // 1. NO RESAMPLING: Read the raw, original high-quality audio
+            // 1. SAFE READING: Reads exact buffer chunks to prevent the MP3 empty-silence bug
             using (var reader = new AudioFileReader(inputPath))
             {
-                originalSampleRate = reader.WaveFormat.SampleRate; // Force original rate!
+                originalSampleRate = reader.WaveFormat.SampleRate;
                 channels = reader.WaveFormat.Channels;
 
-                var buffer = new float[reader.Length / 4];
-                int read = reader.Read(buffer, 0, buffer.Length);
-                Array.Resize(ref buffer, read);
-                samples = buffer;
+                var sampleList = new System.Collections.Generic.List<float>();
+                var buffer = new float[8192];
+                int read;
+
+                while ((read = reader.Read(buffer, 0, buffer.Length)) > 0)
+                {
+                    for (int i = 0; i < read; i++)
+                    {
+                        sampleList.Add(buffer[i]);
+                    }
+                }
+                samples = sampleList.ToArray();
             }
 
             if (token.IsCancellationRequested) return (string.Empty, 0, 0, 0, 0);
@@ -47,7 +55,13 @@ namespace AudioCompressionApp.mohalali
             int bitsPerSample;
             long originalSizeByte = new FileInfo(inputPath).Length;
 
-            // 2. ENCODING
+            // Adjust original size calculation if testing an MP3 for accurate graphs
+            if (inputPath.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase))
+            {
+                originalSizeByte = samples.Length * 2;
+            }
+
+            // 2. FULL ENGINE ROUTING (All 5 Algorithms)
             switch (algorithm)
             {
                 case "DPCM":
@@ -64,11 +78,19 @@ namespace AudioCompressionApp.mohalali
                     compressedData = PackBits(admBits);
                     bitsPerSample = 1;
                     break;
+                case "Predictive Differential Coding":
+                    compressedData = PredictiveDifferentialCoding.Encode(samples, quantizationLevels: quantizationLevels);
+                    bitsPerSample = 8;
+                    break;
+                case "Nonlinear Quantization":
+                    compressedData = NonlinearQuantization.Encode(samples, quantizationLevels: quantizationLevels);
+                    bitsPerSample = 8;
+                    break;
                 default:
                     throw new ArgumentException($"Unknown algorithm: {algorithm}");
             }
 
-            // Write using the ORIGINAL sample rate so it matches perfectly
+            // Write using original sample rate to guarantee 1:1 file size matching later
             WriteCustomWav(outputPath, compressedData, originalSampleRate, channels, bitsPerSample);
 
             double finalElapsed = (DateTime.Now - startTime).TotalSeconds;

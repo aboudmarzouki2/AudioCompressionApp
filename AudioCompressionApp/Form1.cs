@@ -71,10 +71,18 @@ namespace AudioCompressionApp
 
             Label lblAlgo = new Label { Text = "Algorithm:", Bounds = new Rectangle(20, 30, 70, 25) };
             cmbAlgorithms = new ComboBox { Bounds = new Rectangle(90, 28, 200, 25), DropDownStyle = ComboBoxStyle.DropDownList };
-            cmbAlgorithms.Items.AddRange(new string[] { "DPCM", "Delta Modulation", "Adaptive Delta Modulation" });
+
+            // ADDED NEW ALGORITHMS HERE
+            cmbAlgorithms.Items.AddRange(new string[] {
+                "DPCM",
+                "Delta Modulation",
+                "Adaptive Delta Modulation",
+                "Predictive Differential Coding",
+                "Nonlinear Quantization"
+            });
 
             Label lblRate = new Label { Text = "Target Rate:", Bounds = new Rectangle(310, 30, 80, 25) };
-            numSampleRate = new NumericUpDown { Bounds = new Rectangle(390, 28, 90, 25), Maximum = 48000, Minimum = 8000, Value = 44100 };
+            numSampleRate = new NumericUpDown { Bounds = new Rectangle(390, 28, 90, 25), Maximum = 48000, Minimum = 1000, Value = 44100 };
 
             lblQuantization = new Label { Text = "Quant. Levels:", Bounds = new Rectangle(20, 65, 80, 25) };
             numQuantization = new NumericUpDown { Bounds = new Rectangle(100, 63, 60, 25), Maximum = 65536, Minimum = 2, Value = 256 };
@@ -123,9 +131,33 @@ namespace AudioCompressionApp
         private void CmbAlgorithms_SelectedIndexChanged(object sender, EventArgs e)
         {
             string algo = cmbAlgorithms.Text;
-            lblQuantization.Visible = numQuantization.Visible = (algo == "DPCM");
-            lblStepSize.Visible = numStepSize.Visible = (algo == "Delta Modulation" || algo == "Adaptive Delta Modulation");
-            lblAlpha.Visible = numAlpha.Visible = (algo == "Adaptive Delta Modulation");
+
+            // Reset visibility for all controls first
+            lblQuantization.Visible = false;
+            numQuantization.Visible = false;
+            lblStepSize.Visible = false;
+            numStepSize.Visible = false;
+            lblAlpha.Visible = false;
+            numAlpha.Visible = false;
+
+            // Show controls dynamically based on the algorithm's requirements
+            if (algo == "DPCM" || algo == "Predictive Differential Coding" || algo == "Nonlinear Quantization")
+            {
+                lblQuantization.Visible = true;
+                numQuantization.Visible = true;
+            }
+            else if (algo == "Delta Modulation")
+            {
+                lblStepSize.Visible = true;
+                numStepSize.Visible = true;
+            }
+            else if (algo == "Adaptive Delta Modulation")
+            {
+                lblStepSize.Visible = true;
+                numStepSize.Visible = true;
+                lblAlpha.Visible = true;
+                numAlpha.Visible = true;
+            }
         }
 
         private void BtnBrowse_Click(object sender, EventArgs e)
@@ -251,16 +283,16 @@ namespace AudioCompressionApp
 
             try
             {
-                var resultPath = await Task.Run(() =>
+                // Note: result is a Tuple holding (decompressedPath, elapsedSeconds)
+                var result = await Task.Run(() =>
                 {
-                    // Calls your new, dedicated decompression class
                     return DecompressionService.Decompress(txtFilePath.Text, algorithm, qLevels, step, alpha, cts.Token, progress);
                 });
 
-                if (string.IsNullOrEmpty(resultPath)) return;
+                if (string.IsNullOrEmpty(result.decompressedPath)) return;
 
-                txtFilePath.Text = resultPath;
-                lblProps.Text = engine.LoadFileAndGetProperties(resultPath);
+                txtFilePath.Text = result.decompressedPath;
+                lblProps.Text = engine.LoadFileAndGetProperties(result.decompressedPath);
 
                 MessageBox.Show("Decompression completed successfully! The restored file is ready to play.", "Decompression Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }

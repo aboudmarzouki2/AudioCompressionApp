@@ -1,125 +1,138 @@
-﻿using AudioCompressionApp.CompressionAlgorithms;
-using NAudio.Wave;
-using System;
+﻿using System;
 using System.IO;
 using System.Threading;
+using NAudio.Wave;
+using AudioCompressionApp.CompressionAlgorithms;
 
-namespace AudioCompressionApp
+namespace AudioCompressionApp.mohalali
 {
     public static class DecompressionService
     {
-        public static string Decompress(
-            string compressedFilePath,
+        public static (string decompressedPath, double elapsedSeconds) Decompress(
+            string inputPath,
             string algorithm,
             int quantizationLevels,
             int stepSize,
             float alpha,
             CancellationToken token,
-            IProgress<(int percentage, double placeholder, double speed)> progress)
+            IProgress<(int percentage, double ratio, double speed)> progress)
         {
             var startTime = DateTime.Now;
-            string dir = Path.GetDirectoryName(compressedFilePath);
-            string nameWithoutExt = Path.GetFileNameWithoutExtension(compressedFilePath).Replace("_compressed", "");
+            string dir = Path.GetDirectoryName(inputPath);
+            string nameWithoutExt = Path.GetFileNameWithoutExtension(inputPath).Replace("_compressed", "");
             string outputPath = Path.Combine(dir, nameWithoutExt + "_restored.wav");
 
-            if (token.IsCancellationRequested) return string.Empty;
+            if (File.Exists(outputPath)) try { File.Delete(outputPath); } catch { }
 
-            byte[] compressedData;
-            int sampleRate;
-            int channels;
+            byte[] compressedData = null;
+            int sampleRate = 44100;
+            int channels = 1;
+            int bitsPerSample = 8;
 
-            using (var reader = new BinaryReader(File.OpenRead(compressedFilePath)))
+            // 1. READ THE CUSTOM COMPRESSED WAV FILE
+            using (var fs = new FileStream(inputPath, FileMode.Open, FileAccess.Read))
+            using (var reader = new BinaryReader(fs))
             {
-                reader.ReadBytes(12); // Skip RIFF and WAVE header
-                reader.ReadBytes(8);  // Skip fmt header
-                reader.ReadInt16();   // AudioFormat
+                reader.ReadBytes(4); // RIFF
+                reader.ReadInt32();  // File Size
+                reader.ReadBytes(4); // WAVE
+                reader.ReadBytes(4); // fmt 
+                reader.ReadInt32();  // Subchunk1Size
+                reader.ReadInt16();  // AudioFormat
                 channels = reader.ReadInt16();
                 sampleRate = reader.ReadInt32();
-                reader.ReadInt32();   // ByteRate
-                reader.ReadInt16();   // BlockAlign
-                reader.ReadInt16();   // BitsPerSample
-                reader.ReadBytes(4);  // Skip "data" text
-
+                reader.ReadInt32();  // ByteRate
+                reader.ReadInt16();  // BlockAlign
+                bitsPerSample = reader.ReadInt16();
+                reader.ReadBytes(4); // data
                 int dataSize = reader.ReadInt32();
                 compressedData = reader.ReadBytes(dataSize);
             }
 
-            float[] restoredSamples;
+            if (token.IsCancellationRequested) return (string.Empty, 0);
 
+            float[] decodedSamples;
+
+            // 2. ROUTE TO THE CORRECT DECODER
             switch (algorithm)
             {
                 case "DPCM":
-                    restoredSamples = DecodeDPCM(compressedData);
+                    decodedSamples = DPCM.Decode(compressedData, quantizationLevels: quantizationLevels);
                     break;
                 case "Delta Modulation":
-                    byte[] unpackedDM = UnpackBits(compressedData);
-                    restoredSamples = DecodeDM(unpackedDM, stepSize);
+                    byte[] unpackedDM = UnpackBits(compressedData, compressedData.Length * 8);
+                    decodedSamples = DeltaModulation.Decode(unpackedDM, stepSize: stepSize);
                     break;
                 case "Adaptive Delta Modulation":
-                    byte[] unpackedADM = UnpackBits(compressedData);
-                    restoredSamples = DecodeADM(unpackedADM, stepSize, alpha);
+                    byte[] unpackedADM = UnpackBits(compressedData, compressedData.Length * 8);
+                    decodedSamples = AdaptiveDeltaModulation.Decode(unpackedADM, initialStep: stepSize, alpha: alpha);
+                    break;
+                case "Predictive Differential Coding":
+                    decodedSamples = PredictiveDifferentialCoding.Decode(compressedData, quantizationLevels: quantizationLevels);
+                    break;
+                case "Nonlinear Quantization":
+                    decodedSamples = NonlinearQuantization.Decode(compressedData, quantizationLevels: quantizationLevels);
                     break;
                 default:
                     throw new ArgumentException($"Unknown algorithm: {algorithm}");
             }
 
-            for (int i = 0; i <= 100; i += 20)
+            // 3. WRITE BACK TO STANDARD 16-BIT UNCOMPRESSED WAV
+            WriteStandardWav(outputPath, decodedSamples, sampleRate, channels);
+
+            double finalElapsed = (DateTime.Now - startTime).TotalSeconds;
+            progress?.Report((100, 0, 0)); // Update UI Progress
+
+            return (outputPath, finalElapsed);
+        }
+
+        // Reverses the bit-packing done during DM and ADM compression
+        private static byte[] UnpackBits(byte[] packed, int totalBits)
+        {
+            byte[] unpacked = new byte[totalBits];
+            for (int i = 0; i < totalBits; i++)
             {
-                if (token.IsCancellationRequested) return string.Empty;
-                progress?.Report((i, i, i * 0.5));
-                Thread.Sleep(50);
+                int byteIndex = i / 8;
+                int bitIndex = 7 - (i % 8);
+                bool isSet = (packed[byteIndex] & (1 << bitIndex)) != 0;
+                unpacked[i] = isSet ? (byte)1 : (byte)0;
             }
+            return unpacked;
+        }
 
-            using (var writer = new WaveFileWriter(outputPath, new WaveFormat(sampleRate, 16, channels)))
+        // Reconstructs a fully standard, playable WAV file
+        private static void WriteStandardWav(string path, float[] samples, int sampleRate, int channels)
+        {
+            using (var fs = new FileStream(path, FileMode.Create))
+            using (var writer = new BinaryWriter(fs))
             {
-                writer.WriteSamples(restoredSamples, 0, restoredSamples.Length);
-            }
+                int bitsPerSample = 16;
+                int byteRate = sampleRate * channels * bitsPerSample / 8;
+                short blockAlign = (short)(channels * bitsPerSample / 8);
+                int dataSize = samples.Length * 2; // 16-bit = 2 bytes per sample
 
-            progress?.Report((100, 100, 10.0));
-            return outputPath;
-        }
+                writer.Write(new char[] { 'R', 'I', 'F', 'F' });
+                writer.Write(36 + dataSize);
+                writer.Write(new char[] { 'W', 'A', 'V', 'E' });
+                writer.Write(new char[] { 'f', 'm', 't', ' ' });
+                writer.Write(16);
+                writer.Write((short)1); // 1 = PCM format
+                writer.Write((short)channels);
+                writer.Write(sampleRate);
+                writer.Write(byteRate);
+                writer.Write(blockAlign);
+                writer.Write((short)bitsPerSample);
+                writer.Write(new char[] { 'd', 'a', 't', 'a' });
+                writer.Write(dataSize);
 
-        private static float[] DecodeDPCM(byte[] input)
-        {
-            // Ensure you pass the dynamic quantizationLevels from the UI here
-            // You might need to adjust the Decompress signature to accept qLevels
-            return DPCM.Decode(input, 256);
-        }
-
-        private static float[] DecodeDM(byte[] inputBits, int stepSize)
-        {
-            // Simply call your verified algorithm class!
-            return DeltaModulation.Decode(inputBits, stepSize);
-        }
-
-        private static float[] DecodeADM(byte[] inputBits, int stepSize, float alpha)
-        {
-            // Simply call your verified algorithm class!
-            return AdaptiveDeltaModulation.Decode(inputBits, stepSize, alpha);
-        
-        }
-
-        private static byte[] UnpackBits(byte[] packedBytes)
-        {
-            byte[] bits = new byte[packedBytes.Length * 8];
-            for (int i = 0; i < packedBytes.Length; i++)
-            {
-                for (int j = 0; j < 8; j++)
+                // Convert floating point [-1.0, 1.0] back to 16-bit audio [-32768, 32767]
+                foreach (float sample in samples)
                 {
-                    bits[(i * 8) + j] = (byte)((packedBytes[i] >> (7 - j)) & 1);
+                    float clamped = Math.Max(-1.0f, Math.Min(1.0f, sample));
+                    short val = (short)(clamped * 32767f);
+                    writer.Write(val);
                 }
             }
-            return bits;
-        }
-        private static float[] SmoothAudio(float[] samples)
-        {
-            // A simple Moving Average filter to smooth out "stairs"
-            float[] smoothed = new float[samples.Length];
-            for (int i = 1; i < samples.Length - 1; i++)
-            {
-                smoothed[i] = (samples[i - 1] + samples[i] + samples[i + 1]) / 3.0f;
-            }
-            return smoothed;
         }
     }
 }
